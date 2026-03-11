@@ -7,6 +7,7 @@
 <meta name="description" content="72개 금융상품 분석 · AI 상담 · 차의과학대학교 경영학전공">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<script src="https://developers.kakao.com/sdk/js/kakao.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
 <style>
 *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
@@ -505,6 +506,92 @@ body {
   z-index: 299;
 }
 .sidebar-overlay.open { display: block; }
+
+/* ─── LOGIN MODAL ─── */
+.login-overlay {
+  position: fixed; inset: 0; z-index: 10000;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.3s;
+}
+.login-overlay.active { opacity: 1; pointer-events: auto; }
+.login-card {
+  background: #fff; border-radius: 16px;
+  padding: 40px 32px; max-width: 380px; width: 90%;
+  text-align: center;
+}
+.login-logo-icon {
+  width: 52px; height: 52px; border-radius: 50%;
+  background: var(--accent); color: #fff;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 24px; margin-bottom: 12px;
+}
+.login-card h3 { font-size: 18px; font-weight: 700; margin-bottom: 6px; color: #111; }
+.login-card > p { font-size: 13px; color: #888; line-height: 1.6; margin-bottom: 20px; }
+.consent-section {
+  margin: 0 0 16px; border: 1px solid #e5e5e5; border-radius: 10px;
+  text-align: left; overflow: hidden;
+}
+.consent-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 16px; cursor: pointer; font-size: 13px; color: #333;
+}
+.consent-item + .consent-item { border-top: 1px solid #f0f0f0; }
+.consent-all { background: #f8f8f8; font-weight: 600; }
+.consent-item input[type="checkbox"] {
+  width: 18px; height: 18px; accent-color: var(--accent); flex-shrink: 0;
+}
+.consent-item em { font-style: normal; font-size: 11px; color: #999; }
+.consent-detail {
+  padding: 8px 16px 12px; font-size: 11px; color: #999; line-height: 1.6;
+  background: #fafafa; border-top: 1px solid #f0f0f0;
+}
+#kakao-login-btn {
+  width: 100%; padding: 13px; border: none; border-radius: 10px;
+  background: #FEE500; color: #3C1E1E; font-size: 14px; font-weight: 700;
+  cursor: pointer; font-family: inherit; transition: all 0.2s;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+#kakao-login-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+#kakao-login-btn:not(:disabled):hover { box-shadow: 0 4px 12px rgba(254,229,0,0.4); }
+.login-divider {
+  margin: 14px 0; font-size: 12px; color: #bbb;
+  display: flex; align-items: center; gap: 12px;
+}
+.login-divider::before, .login-divider::after {
+  content: ''; flex: 1; height: 1px; background: #e5e5e5;
+}
+.login-guest {
+  width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 10px;
+  background: #fff; color: #666; font-size: 13px; cursor: pointer;
+  font-family: inherit; transition: all 0.2s;
+}
+.login-guest:hover { background: #f5f5f5; }
+
+/* 유저 뱃지 */
+.user-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; margin: 8px 12px;
+  background: rgba(255,255,255,0.06); border-radius: 8px;
+  font-size: 12px; color: #aaa;
+}
+.user-bar .name { color: #fff; font-weight: 500; }
+.user-bar .logout-link {
+  margin-left: auto; color: #666; cursor: pointer;
+  font-size: 11px; text-decoration: underline;
+}
+.user-bar .logout-link:hover { color: #999; }
+
+/* 채팅 패널 잠금 */
+.chat-panel.locked .mode-tabs,
+.chat-panel.locked #tttContainer,
+.chat-panel.locked #stsContainer,
+.chat-panel.locked .ftf-container {
+  pointer-events: none; opacity: 0.3;
+}
+.mode-tab.disabled { pointer-events: none; opacity: 0.3; }
 </style>
 </head>
 <body>
@@ -522,6 +609,11 @@ body {
     <div class="sidebar-header">
       <h1>금융상품 가이드</h1>
       <p>차의과학대학교 경영학전공</p>
+    </div>
+
+    <div class="user-bar" id="userBar" style="display:none">
+      <span class="name" id="user-badge"></span>
+      <span class="logout-link" id="logout-btn" onclick="finmarketAuth.logout()">로그아웃</span>
     </div>
 
     <div class="sidebar-section">
@@ -1511,5 +1603,42 @@ document.addEventListener('DOMContentLoaded', () => {
   renderContent();
 });
 </script>
+
+<!-- ─── LOGIN MODAL (v5 패턴) ─── -->
+<div class="login-overlay" id="login-modal">
+  <div class="login-card">
+    <div class="login-logo-icon">&#128200;</div>
+    <h3>금융상품 가이드</h3>
+    <p>카카오 계정으로 로그인하고<br>AI 금융상품 상담을 이용하세요</p>
+
+    <div class="consent-section">
+      <label class="consent-item consent-all">
+        <input type="checkbox" id="consent-all">
+        <span>전체 동의하기</span>
+      </label>
+      <label class="consent-item">
+        <input type="checkbox" class="consent-req" checked disabled>
+        <span>카카오 계정 정보 제공 동의 <em>(필수)</em></span>
+      </label>
+      <label class="consent-item has-detail">
+        <input type="checkbox" class="consent-req">
+        <span>개인정보 수집 및 이용 동의 <em>(필수)</em></span>
+      </label>
+      <p class="consent-detail" id="consent-detail-1">
+        수집항목: 카카오 닉네임 · 이용목적: AI 상담 · 보유기간: 서비스 이용 종료 시 파기
+      </p>
+      <label class="consent-item">
+        <input type="checkbox" class="consent-opt">
+        <span>마케팅 정보 수신 동의 <em style="color:#bbb">(선택)</em></span>
+      </label>
+    </div>
+
+    <button id="kakao-login-btn" type="button" disabled>카카오 로그인</button>
+    <div class="login-divider">또는</div>
+    <button id="login-guest-btn" class="login-guest">로그인 없이 둘러보기</button>
+  </div>
+</div>
+
+<script src="js/auth.js"></script>
 </body>
 </html>
