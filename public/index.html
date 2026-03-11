@@ -1690,8 +1690,6 @@ function renderContent() {
   }
 
   // Category overview with product chips
-  const representativeProduct = cat.products.find(p => p.representative);
-
   main.innerHTML = `
     <div class="content-header">
       <div class="cat-label">카테고리</div>
@@ -1700,10 +1698,9 @@ function renderContent() {
     </div>
     <div class="products-grid">
       ${cat.products.map(p => `
-        <div class="product-chip ${p.representative ? 'active' : ''}" onclick="selectProduct('${p.name}')">
+        <div class="product-chip" onclick="selectProduct('${p.name}')">
           <span class="chip-num">#${p.num}</span>
           ${p.name}
-          ${p.representative ? '<span style="margin-left:auto;font-size:11px;color:var(--text-secondary)">대표</span>' : ''}
         </div>
       `).join('')}
     </div>
