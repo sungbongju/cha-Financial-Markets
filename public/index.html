@@ -1594,6 +1594,18 @@ function detectProductFromText(text) {
   return best;
 }
 
+// AI 응답에서 모든 상품명 감지 (여러 개 나열 판별용)
+function detectAllProductsFromText(text) {
+  if (!text) return [];
+  const t = text.replace(/\s/g, '').toUpperCase();
+  const found = [];
+  for (const name of Object.keys(ALL_PRODUCT_NAMES)) {
+    const nameNorm = name.replace(/\s/g, '').toUpperCase();
+    if (t.includes(nameNorm)) found.push(name);
+  }
+  return found;
+}
+
 // 카테고리 전체 질문인지 판별
 const CATEGORY_DISPLAY_NAMES = Object.values(CATEGORIES).map(c => c.name);
 const CATEGORY_LEVEL_PATTERNS = ['종류','뭐가 있','어떤 것','카테고리','분류','전체','목록','리스트'];
@@ -1908,11 +1920,18 @@ function stsNavigateByText(text, isAiResponse = false) {
   if (isAiResponse && Date.now() - stsLastNavTime < 5000) return;
 
   if (isAiResponse) {
-    // AI 응답: 카테고리만 감지 (상품명 여러 개 나열하므로 상품 감지 안 함)
-    const aiCat = detectCategoryFromText(text);
-    if (aiCat) {
-      selectCategory(aiCat);
+    // AI 응답: 상품 1개만 감지되면 상품 이동, 여러 개면 카테고리만
+    const aiProducts = detectAllProductsFromText(text);
+    if (aiProducts.length === 1) {
+      selectCategory(ALL_PRODUCT_NAMES[aiProducts[0]]);
+      selectProduct(aiProducts[0]);
       stsLastNavTime = Date.now();
+    } else {
+      const aiCat = detectCategoryFromText(text);
+      if (aiCat) {
+        selectCategory(aiCat);
+        stsLastNavTime = Date.now();
+      }
     }
   } else {
     // 사용자 발화: 상품 + 카테고리 모두 감지
