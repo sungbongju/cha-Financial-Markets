@@ -1901,15 +1901,22 @@ async function startSTS() {
   }
 }
 
-function stsNavigateByText(text) {
+let stsLastNavTime = 0;  // 마지막 네비게이션 시각
+function stsNavigateByText(text, isAiResponse = false) {
   if (!text) return;
+  // AI 응답에서는 최근 5초 이내 이미 네비게이션 했으면 건너뜀
+  if (isAiResponse && Date.now() - stsLastNavTime < 5000) return;
   const userProduct = detectProductFromText(text);
   if (userProduct) {
     selectCategory(ALL_PRODUCT_NAMES[userProduct]);
     selectProduct(userProduct);
+    stsLastNavTime = Date.now();
   } else {
     const userCat = detectCategoryFromText(text);
-    if (userCat) selectCategory(userCat);
+    if (userCat) {
+      selectCategory(userCat);
+      stsLastNavTime = Date.now();
+    }
   }
 }
 
@@ -1956,8 +1963,8 @@ function handleSTSEvent(event) {
     case 'response.audio_transcript.done':
       if (event.transcript) {
         transcriptEl.textContent = 'AI: ' + event.transcript;
-        // AI 응답에서 네비게이션 (STT 오인식 보완)
-        stsNavigateByText(event.transcript);
+        // AI 응답에서 네비게이션 (STT 오인식 보완, 사용자 전사 실패 시만)
+        stsNavigateByText(event.transcript, true);
       }
       transcriptEl._aiBuffer = '';
       break;
