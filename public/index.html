@@ -1956,6 +1956,8 @@ function handleSTSEvent(event) {
     case 'response.audio_transcript.done':
       if (event.transcript) {
         transcriptEl.textContent = 'AI: ' + event.transcript;
+        // AI 응답에서 네비게이션 (STT 오인식 보완)
+        stsNavigateByText(event.transcript);
       }
       transcriptEl._aiBuffer = '';
       break;
