@@ -1906,16 +1906,27 @@ function stsNavigateByText(text, isAiResponse = false) {
   if (!text) return;
   // AI 응답에서는 최근 5초 이내 이미 네비게이션 했으면 건너뜀
   if (isAiResponse && Date.now() - stsLastNavTime < 5000) return;
-  const userProduct = detectProductFromText(text);
-  if (userProduct) {
-    selectCategory(ALL_PRODUCT_NAMES[userProduct]);
-    selectProduct(userProduct);
-    stsLastNavTime = Date.now();
-  } else {
-    const userCat = detectCategoryFromText(text);
-    if (userCat) {
-      selectCategory(userCat);
+
+  if (isAiResponse) {
+    // AI 응답: 카테고리만 감지 (상품명 여러 개 나열하므로 상품 감지 안 함)
+    const aiCat = detectCategoryFromText(text);
+    if (aiCat) {
+      selectCategory(aiCat);
       stsLastNavTime = Date.now();
+    }
+  } else {
+    // 사용자 발화: 상품 + 카테고리 모두 감지
+    const userProduct = detectProductFromText(text);
+    if (userProduct) {
+      selectCategory(ALL_PRODUCT_NAMES[userProduct]);
+      selectProduct(userProduct);
+      stsLastNavTime = Date.now();
+    } else {
+      const userCat = detectCategoryFromText(text);
+      if (userCat) {
+        selectCategory(userCat);
+        stsLastNavTime = Date.now();
+      }
     }
   }
 }
