@@ -131,6 +131,18 @@ function detectProduct(text) {
   return best;
 }
 
+// 카테고리 전체 질문인지 판별 (예: "채무증권이 뭐야?", "예금 종류 알려줘")
+const CATEGORY_NAMES = Object.values(CATEGORIES).map(c => c.name);
+const CATEGORY_LEVEL_PATTERNS = ['종류','뭐가 있','어떤 것','카테고리','분류','전체','목록','리스트'];
+
+function isCategoryLevelQuestion(text) {
+  // 카테고리명 직접 언급 (예: "채무증권", "파생상품")
+  if (CATEGORY_NAMES.some(name => text.includes(name))) return true;
+  // "~종류", "뭐가 있어" 등 카테고리 수준 질문 패턴
+  if (CATEGORY_LEVEL_PATTERNS.some(p => text.includes(p))) return true;
+  return false;
+}
+
 function detectCategory(text) {
   const greetings = ['안녕','반가','고마','감사','수고','잘가','바이'];
   if (greetings.some(g => text.includes(g))) return null;
@@ -253,11 +265,15 @@ export default async function handler(req, res) {
     }
 
     // 상품명 폴백: GPT가 productName 안 넣었으면 키워드로 감지
+    // 단, 카테고리 전체 질문이면 상품 감지 생략 (카테고리로만 이동)
     if (parsed.action === 'navigate' && !parsed.productName) {
-      const detectedProduct = detectProduct(message);
-      if (detectedProduct) {
-        parsed.productName = detectedProduct;
-        parsed.categoryId = ALL_PRODUCTS[detectedProduct];
+      const isCategoryQuestion = isCategoryLevelQuestion(message);
+      if (!isCategoryQuestion) {
+        const detectedProduct = detectProduct(message);
+        if (detectedProduct) {
+          parsed.productName = detectedProduct;
+          parsed.categoryId = ALL_PRODUCTS[detectedProduct];
+        }
       }
     }
 

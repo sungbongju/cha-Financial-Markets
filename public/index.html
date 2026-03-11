@@ -1579,6 +1579,8 @@ for (const [catId, cat] of Object.entries(CATEGORIES)) {
 
 function detectProductFromText(text) {
   if (!text) return null;
+  // 카테고리 수준 질문이면 상품 감지 생략
+  if (isCategoryLevelQuestion(text)) return null;
   const t = text.toUpperCase();
   let best = null, bestLen = 0;
   for (const name of Object.keys(ALL_PRODUCT_NAMES)) {
@@ -1588,6 +1590,15 @@ function detectProductFromText(text) {
     }
   }
   return best;
+}
+
+// 카테고리 전체 질문인지 판별
+const CATEGORY_DISPLAY_NAMES = Object.values(CATEGORIES).map(c => c.name);
+const CATEGORY_LEVEL_PATTERNS = ['종류','뭐가 있','어떤 것','카테고리','분류','전체','목록','리스트'];
+function isCategoryLevelQuestion(text) {
+  if (CATEGORY_DISPLAY_NAMES.some(name => text.includes(name))) return true;
+  if (CATEGORY_LEVEL_PATTERNS.some(p => text.includes(p))) return true;
+  return false;
 }
 
 // ═══════════════════════════════════════════
