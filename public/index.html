@@ -1582,28 +1582,46 @@ function detectProductFromText(text) {
   if (!text) return null;
   // 카테고리 수준 질문이면 상품 감지 생략
   if (isCategoryLevelQuestion(text)) return null;
-  const t = text.replace(/\s/g, '').toUpperCase();
   let best = null, bestLen = 0;
   for (const name of Object.keys(ALL_PRODUCT_NAMES)) {
-    const nameNorm = name.replace(/\s/g, '').toUpperCase();
-    if (t.includes(nameNorm) && nameNorm.length > bestLen) {
+    if (isProductMentioned(text, name) && name.length > bestLen) {
       best = name;
-      bestLen = nameNorm.length;
+      bestLen = name.length;
     }
   }
   return best;
 }
 
+// "금" 등 짧은 상품명의 오탐 방지 — 금융, 금리, 세금 등 복합어 제외
+const SHORT_PRODUCT_EXCLUDE = {
+  '금': ['금융','금리','금전','금액','금산','세금','자금','현금','기금','공금','예금','적금','출금','입금','원금','잔금','벌금','과금','환금','상금','장금','보금']
+};
+
 // AI 응답에서 모든 상품명 감지 (여러 개 나열 판별용)
 function detectAllProductsFromText(text) {
   if (!text) return [];
-  const t = text.replace(/\s/g, '').toUpperCase();
   const found = [];
   for (const name of Object.keys(ALL_PRODUCT_NAMES)) {
-    const nameNorm = name.replace(/\s/g, '').toUpperCase();
-    if (t.includes(nameNorm)) found.push(name);
+    if (isProductMentioned(text, name)) found.push(name);
   }
   return found;
+}
+
+function isProductMentioned(text, productName) {
+  const t = text.replace(/\s/g, '').toUpperCase();
+  const nameNorm = productName.replace(/\s/g, '').toUpperCase();
+  if (!t.includes(nameNorm)) return false;
+  // 짧은 상품명(2자 이하)은 복합어 체크
+  if (productName.length <= 2 && SHORT_PRODUCT_EXCLUDE[productName]) {
+    const excludes = SHORT_PRODUCT_EXCLUDE[productName];
+    // 텍스트에서 복합어를 제거한 뒤 다시 체크
+    let cleaned = text;
+    for (const ex of excludes) {
+      cleaned = cleaned.split(ex).join('');
+    }
+    return cleaned.replace(/\s/g, '').toUpperCase().includes(nameNorm);
+  }
+  return true;
 }
 
 // 카테고리 전체 질문인지 판별
