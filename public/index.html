@@ -1547,7 +1547,7 @@ const CATEGORY_KEYWORDS = {
   fund:        ['펀드','ETF','MMF','REITs','수익증권','리츠'],
   derivative_s:['ELS','ETN','ELD','ELW','파생결합'],
   derivative:  ['선물','옵션','파생상품','주가지수선물','주가지수옵션'],
-  alternative: ['금투자','달러','대체투자','원자재'],
+  alternative: ['금투자','달러','대체투자','대체 투자','원자재'],
   trust:       ['신탁','금전신탁','재산신탁','MMT'],
   loan:        ['대출','신용대출','담보대출','신용카드','팩토링','여신'],
   asset_mgmt:  ['CMA','연금','IRP','ISA','자산관리','연금저축'],
@@ -1556,13 +1556,14 @@ const CATEGORY_KEYWORDS = {
 
 function detectCategoryFromText(text) {
   if (!text) return null;
-  const t = text.toUpperCase();
+  const t = text.replace(/\s/g, '').toUpperCase();
   let best = null, bestLen = 0;
   for (const [catId, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
     for (const kw of keywords) {
-      if (t.includes(kw.toUpperCase()) && kw.length > bestLen) {
+      const kwNorm = kw.replace(/\s/g, '').toUpperCase();
+      if (t.includes(kwNorm) && kwNorm.length > bestLen) {
         best = catId;
-        bestLen = kw.length;
+        bestLen = kwNorm.length;
       }
     }
   }
@@ -1581,12 +1582,13 @@ function detectProductFromText(text) {
   if (!text) return null;
   // 카테고리 수준 질문이면 상품 감지 생략
   if (isCategoryLevelQuestion(text)) return null;
-  const t = text.toUpperCase();
+  const t = text.replace(/\s/g, '').toUpperCase();
   let best = null, bestLen = 0;
   for (const name of Object.keys(ALL_PRODUCT_NAMES)) {
-    if (t.includes(name.toUpperCase()) && name.length > bestLen) {
+    const nameNorm = name.replace(/\s/g, '').toUpperCase();
+    if (t.includes(nameNorm) && nameNorm.length > bestLen) {
       best = name;
-      bestLen = name.length;
+      bestLen = nameNorm.length;
     }
   }
   return best;
@@ -1596,8 +1598,9 @@ function detectProductFromText(text) {
 const CATEGORY_DISPLAY_NAMES = Object.values(CATEGORIES).map(c => c.name);
 const CATEGORY_LEVEL_PATTERNS = ['종류','뭐가 있','어떤 것','카테고리','분류','전체','목록','리스트'];
 function isCategoryLevelQuestion(text) {
-  if (CATEGORY_DISPLAY_NAMES.some(name => text.includes(name))) return true;
-  if (CATEGORY_LEVEL_PATTERNS.some(p => text.includes(p))) return true;
+  const t = text.replace(/\s/g, '');
+  if (CATEGORY_DISPLAY_NAMES.some(name => t.includes(name.replace(/\s/g, '')))) return true;
+  if (CATEGORY_LEVEL_PATTERNS.some(p => t.includes(p))) return true;
   return false;
 }
 

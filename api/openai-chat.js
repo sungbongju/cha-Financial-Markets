@@ -21,7 +21,7 @@ const CATEGORY_KEYWORDS = {
   fund:        ['펀드','ETF','MMF','REITs','수익증권','리츠'],
   derivative_s:['ELS','ELN','ETN','ELD','ELW','파생결합'],
   derivative:  ['선물','옵션','파생상품','주가지수선물','주가지수옵션'],
-  alternative: ['금투자','금값','금 시세','달러','대체투자','원자재','금 투자'],
+  alternative: ['금투자','금값','금 시세','달러','대체투자','대체 투자','원자재','금 투자'],
   trust:       ['신탁','금전신탁','재산신탁','MMT'],
   loan:        ['대출','신용대출','담보대출','신용카드','팩토링','여신'],
   asset_mgmt:  ['CMA','연금','IRP','ISA','자산관리','연금저축'],
@@ -120,12 +120,13 @@ for (const [catId, cat] of Object.entries(CATEGORIES)) {
 
 function detectProduct(text) {
   if (!text) return null;
-  const t = text.toUpperCase();
+  const t = text.replace(/\s/g, '').toUpperCase();
   let best = null, bestLen = 0;
   for (const name of Object.keys(ALL_PRODUCTS)) {
-    if (t.includes(name.toUpperCase()) && name.length > bestLen) {
+    const nameNorm = name.replace(/\s/g, '').toUpperCase();
+    if (t.includes(nameNorm) && nameNorm.length > bestLen) {
       best = name;
-      bestLen = name.length;
+      bestLen = nameNorm.length;
     }
   }
   return best;
@@ -136,10 +137,9 @@ const CATEGORY_NAMES = Object.values(CATEGORIES).map(c => c.name);
 const CATEGORY_LEVEL_PATTERNS = ['종류','뭐가 있','어떤 것','카테고리','분류','전체','목록','리스트'];
 
 function isCategoryLevelQuestion(text) {
-  // 카테고리명 직접 언급 (예: "채무증권", "파생상품")
-  if (CATEGORY_NAMES.some(name => text.includes(name))) return true;
-  // "~종류", "뭐가 있어" 등 카테고리 수준 질문 패턴
-  if (CATEGORY_LEVEL_PATTERNS.some(p => text.includes(p))) return true;
+  const t = text.replace(/\s/g, '');
+  if (CATEGORY_NAMES.some(name => t.includes(name.replace(/\s/g, '')))) return true;
+  if (CATEGORY_LEVEL_PATTERNS.some(p => t.includes(p))) return true;
   return false;
 }
 
@@ -147,13 +147,16 @@ function detectCategory(text) {
   const greetings = ['안녕','반가','고마','감사','수고','잘가','바이'];
   if (greetings.some(g => text.includes(g))) return null;
 
+  const t = text.replace(/\s/g, '').toLowerCase();
   for (const [catId, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-    if (keywords.some(kw => text.toLowerCase().includes(kw.toLowerCase()))) {
+    if (keywords.some(kw => t.includes(kw.replace(/\s/g, '').toLowerCase()))) {
       return catId;
     }
   }
   return null;
 }
+
+
 
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') {
