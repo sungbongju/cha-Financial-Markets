@@ -35,7 +35,7 @@ export default async function handler(req, res) {
     const data = await response.json();
 
     res.setHeader('Access-Control-Allow-Origin', '*');
-    return res.status(200).json({ token: data.data?.token || data.token });
+    return res.status(200).json(data);
   } catch (error) {
     console.error('HeyGen token error:', error);
     return res.status(500).json({ error: error.message });
