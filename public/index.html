@@ -1938,19 +1938,24 @@ function stsNavigateByText(text, isAiResponse = false) {
   if (isAiResponse && Date.now() - stsLastNavTime < 5000) return;
 
   if (isAiResponse) {
-    // AI 응답: 상품 1개만 감지되면 상품 이동, 여러 개면 카테고리만
+    // AI 응답: 감지된 상품으로 네비게이션
     const aiProducts = detectAllProductsFromText(text);
     if (aiProducts.length === 1) {
       selectCategory(ALL_PRODUCT_NAMES[aiProducts[0]]);
       selectProduct(aiProducts[0]);
       stsLastNavTime = Date.now();
-    } else {
-      const aiCat = detectCategoryFromText(text);
-      if (aiCat) {
-        selectCategory(aiCat);
-        stsLastNavTime = Date.now();
+    } else if (aiProducts.length > 1) {
+      // 여러 상품 → 가장 많이 언급된 카테고리로 이동
+      const catCount = {};
+      for (const p of aiProducts) {
+        const cat = ALL_PRODUCT_NAMES[p];
+        catCount[cat] = (catCount[cat] || 0) + 1;
       }
+      const bestCat = Object.entries(catCount).sort((a, b) => b[1] - a[1])[0][0];
+      selectCategory(bestCat);
+      stsLastNavTime = Date.now();
     }
+    // 상품 0개면 네비게이션 안 함
   } else {
     // 사용자 발화: 상품 + 카테고리 모두 감지
     const userProduct = detectProductFromText(text);
