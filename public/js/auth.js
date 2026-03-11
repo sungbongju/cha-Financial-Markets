@@ -1,26 +1,33 @@
 /**
  * auth.js - 금융상품 가이드 카카오 로그인
- * (cha-biz-ai-v5 패턴 기반, 서버 DB 없이 localStorage만 사용)
+ * (cha-biz-ai-v5 패턴, finmarket_db 서버 연동)
  */
 (function () {
   'use strict';
 
+  var API_BASE = 'https://aiforalab.com/finmarket-api/api.php';
   var KAKAO_JS_KEY = 'fc0a1313d895b1956f3830e5bf14307b';
+  var TOKEN_KEY = 'finmarket_token';
   var USER_KEY = 'finmarket_user';
   var _loginInProgress = false;
 
   // ── 세션 관리 ──
-  function getStoredUser() {
+  function getStoredSession() {
     try {
-      return JSON.parse(localStorage.getItem(USER_KEY) || 'null');
-    } catch (e) { return null; }
+      var token = localStorage.getItem(TOKEN_KEY);
+      var user = JSON.parse(localStorage.getItem(USER_KEY) || 'null');
+      if (token && user) return { token: token, user: user };
+    } catch (e) {}
+    return null;
   }
 
-  function saveUser(user) {
+  function saveSession(token, user) {
+    localStorage.setItem(TOKEN_KEY, token);
     localStorage.setItem(USER_KEY, JSON.stringify(user));
   }
 
-  function clearUser() {
+  function clearSession() {
+    localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
   }
 
@@ -35,10 +42,8 @@
       btn.textContent = '로그인 중...';
     }
 
-    // 기존 토큰 정리
     try { Kakao.Auth.setAccessToken(null); } catch (e) {}
 
-    // 45초 타임아웃
     var timeout = setTimeout(function () {
       _loginInProgress = false;
       if (btn) { btn.disabled = false; btn.textContent = '카카오 로그인'; }
@@ -65,11 +70,8 @@
       success: function (res) {
         var nickname = (res.kakao_account && res.kakao_account.profile && res.kakao_account.profile.nickname) || '사용자';
         var kakaoId = res.id;
-
-        var user = { kakaoId: kakaoId, name: nickname };
-        saveUser(user);
-        onLoginSuccess(user);
-        _loginInProgress = false;
+        var email = (res.kakao_account && res.kakao_account.email) || null;
+        sendLoginToServer(kakaoId, nickname, email, resetBtn);
       },
       fail: function (err) {
         console.error('Kakao user info error:', err);
@@ -79,14 +81,41 @@
     });
   }
 
+  function sendLoginToServer(kakaoId, nickname, email, resetBtn) {
+    fetch(API_BASE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'kakao_login', kakao_id: String(kakaoId), nickname: nickname, email: email })
+    })
+    .then(function (res) { return res.json(); })
+    .then(function (data) {
+      _loginInProgress = false;
+      if (data.success) {
+        saveSession(data.token, data.user);
+        onLoginSuccess(data.user);
+      } else {
+        console.error('Server login error:', data.error);
+        if (resetBtn) { resetBtn.disabled = false; resetBtn.textContent = '카카오 로그인'; }
+      }
+    })
+    .catch(function (err) {
+      _loginInProgress = false;
+      console.error('Server login fetch error:', err);
+      // 서버 실패 시 localStorage 폴백
+      var user = { name: nickname, visit_count: 1 };
+      saveSession('local', user);
+      onLoginSuccess(user);
+    });
+  }
+
   // ── 게스트 모드 ──
   function guestLogin() {
-    var user = { kakaoId: null, name: '게스트' };
-    saveUser(user);
+    var user = { name: '게스트', visit_count: 0 };
+    saveSession('guest', user);
     onLoginSuccess(user);
   }
 
-  // ── 로그인 성공 처리 ──
+  // ── 로그인 성공 ──
   function onLoginSuccess(user) {
     closeLoginModal();
     updateUI(user);
@@ -96,29 +125,27 @@
   // ── 로그아웃 ──
   function logout() {
     try { Kakao.Auth.logout(function () {}); } catch (e) {}
-    clearUser();
+    clearSession();
     disableAIFeatures();
     showLoginModal();
     updateUI(null);
   }
 
-  // ── UI 업데이트 ──
+  // ── UI ──
   function updateUI(user) {
     var userBar = document.getElementById('userBar');
     var badge = document.getElementById('user-badge');
     if (user) {
-      if (badge) badge.textContent = user.name;
+      if (badge) badge.textContent = user.name + (user.visit_count > 1 ? ' · ' + user.visit_count + '회 방문' : '');
       if (userBar) userBar.style.display = 'flex';
     } else {
       if (userBar) userBar.style.display = 'none';
     }
   }
 
-  // ── AI 기능 게이트 ──
   function enableAIFeatures() {
     var panel = document.getElementById('chatPanel');
     if (panel) panel.classList.remove('locked');
-    // 모드 탭 활성화
     document.querySelectorAll('.mode-tab').forEach(function (t) { t.classList.remove('disabled'); });
   }
 
@@ -128,15 +155,12 @@
     document.querySelectorAll('.mode-tab').forEach(function (t) { t.classList.add('disabled'); });
   }
 
-  // ── 로그인 모달 ──
   function showLoginModal() {
     var modal = document.getElementById('login-modal');
     if (modal) {
       modal.classList.add('active');
-      // 로그인 버튼 상태 리셋
       var btn = document.getElementById('kakao-login-btn');
       if (btn) { btn.disabled = true; btn.textContent = '카카오 로그인'; }
-      // 체크박스 리셋
       document.querySelectorAll('#login-modal input[type="checkbox"]').forEach(function (c) {
         if (!c.disabled) c.checked = false;
       });
@@ -170,7 +194,6 @@
     }
     allChecks.forEach(function (c) { c.addEventListener('change', updateState); });
 
-    // 상세보기 토글
     var detail = document.getElementById('consent-detail-1');
     if (detail) {
       var detailLabel = detail.previousElementSibling;
@@ -188,43 +211,56 @@
 
   // ── 초기화 ──
   function init() {
-    // Kakao SDK 초기화
     if (window.Kakao && !Kakao.isInitialized()) {
       Kakao.init(KAKAO_JS_KEY);
     }
 
     setupConsent();
 
-    // 버튼 이벤트
     var kakaoBtn = document.getElementById('kakao-login-btn');
     if (kakaoBtn) kakaoBtn.addEventListener('click', kakaoLogin);
 
     var guestBtn = document.getElementById('login-guest-btn');
     if (guestBtn) guestBtn.addEventListener('click', guestLogin);
 
-    var logoutBtn = document.getElementById('logout-btn');
-    if (logoutBtn) logoutBtn.addEventListener('click', logout);
-
-    // 기존 세션 확인
-    var user = getStoredUser();
-    if (user) {
-      onLoginSuccess(user);
+    // 기존 세션 확인 → 서버 검증
+    var session = getStoredSession();
+    if (session && session.token && session.token !== 'guest' && session.token !== 'local') {
+      // 서버에 토큰 검증
+      fetch(API_BASE + '?action=verify&token=' + encodeURIComponent(session.token))
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (data.success) {
+            saveSession(session.token, data.user);
+            onLoginSuccess(data.user);
+          } else {
+            clearSession();
+            disableAIFeatures();
+            setTimeout(showLoginModal, 1500);
+          }
+        })
+        .catch(function () {
+          // 서버 불통 시 로컬 세션으로 진행
+          onLoginSuccess(session.user);
+        });
+    } else if (session) {
+      // 게스트/로컬 세션
+      onLoginSuccess(session.user);
     } else {
       disableAIFeatures();
       setTimeout(showLoginModal, 1500);
     }
   }
 
-  // DOM Ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
     init();
   }
 
-  // 전역 노출
   window.finmarketAuth = {
     logout: logout,
-    getUser: getStoredUser
+    getUser: function () { var s = getStoredSession(); return s ? s.user : null; },
+    getToken: function () { return localStorage.getItem(TOKEN_KEY); }
   };
 })();
