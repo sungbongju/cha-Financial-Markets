@@ -4,6 +4,7 @@ const ALLOWED_ENDPOINTS = [
   "/v1/streaming.start",
   "/v1/streaming.task",
   "/v1/streaming.stop",
+  "/v1/streaming.interrupt",
 ];
 
 export default async function handler(req, res) {

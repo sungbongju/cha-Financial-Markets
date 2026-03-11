@@ -325,6 +325,10 @@ body {
   0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
   40% { opacity: 1; transform: scale(1); }
 }
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
 
 .chat-input-area {
   padding: 16px 20px;
@@ -949,6 +953,59 @@ let ftfAutoListen = true;
 let ftfSilenceTimer = null;
 
 // ═══════════════════════════════════════════
+// CATEGORY KEYWORD DETECTION (STS 네비게이션용)
+// ═══════════════════════════════════════════
+const CATEGORY_KEYWORDS = {
+  deposit:     ['예금','적금','정기예금','보통예금','청약','당좌'],
+  equity:      ['주식','지분증권','우선주','해외주식','공매도','배당'],
+  debt:        ['채권','국고채','회사채','콜','CP','CD','RP','MMDA','ABS','MBS','CDO','전환사채','채무증권'],
+  fund:        ['펀드','ETF','MMF','REITs','수익증권','리츠'],
+  derivative_s:['ELS','ETN','ELD','ELW','파생결합'],
+  derivative:  ['선물','옵션','파생상품','주가지수선물','주가지수옵션'],
+  alternative: ['금투자','달러','대체투자','원자재'],
+  trust:       ['신탁','금전신탁','재산신탁','MMT'],
+  loan:        ['대출','신용대출','담보대출','신용카드','팩토링','여신'],
+  asset_mgmt:  ['CMA','연금','IRP','ISA','자산관리','연금저축'],
+  insurance:   ['보험','생명보험','손해보험']
+};
+
+function detectCategoryFromText(text) {
+  if (!text) return null;
+  const t = text.toUpperCase();
+  let best = null, bestLen = 0;
+  for (const [catId, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
+    for (const kw of keywords) {
+      if (t.includes(kw.toUpperCase()) && kw.length > bestLen) {
+        best = catId;
+        bestLen = kw.length;
+      }
+    }
+  }
+  return best;
+}
+
+// 전체 72개 상품명 → 카테고리 매핑
+const ALL_PRODUCT_NAMES = {};
+for (const [catId, cat] of Object.entries(CATEGORIES)) {
+  for (const p of cat.products) {
+    ALL_PRODUCT_NAMES[p.name] = catId;
+  }
+}
+
+function detectProductFromText(text) {
+  if (!text) return null;
+  const t = text.toUpperCase();
+  let best = null, bestLen = 0;
+  for (const name of Object.keys(ALL_PRODUCT_NAMES)) {
+    if (t.includes(name.toUpperCase()) && name.length > bestLen) {
+      best = name;
+      bestLen = name.length;
+    }
+  }
+  return best;
+}
+
+// ═══════════════════════════════════════════
 // CATEGORY & CONTENT
 // ═══════════════════════════════════════════
 function selectCategory(catId) {
@@ -966,8 +1023,26 @@ function selectCategory(catId) {
   if (window.innerWidth <= 768) toggleSidebar();
 }
 
-function selectProduct(productName) {
+async function selectProduct(productName) {
   currentProduct = productName;
+
+  // PRODUCT_DETAILS에 없으면 GPT에 동적 요청
+  if (!PRODUCT_DETAILS[productName]) {
+    renderContent(); // 먼저 로딩 UI 표시
+    try {
+      const res = await fetch('/api/openai-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productDetail: productName })
+      });
+      const data = await res.json();
+      if (data.details && Array.isArray(data.details) && data.details.length === 11) {
+        PRODUCT_DETAILS[productName] = data.details; // 캐시
+      }
+    } catch (e) {
+      console.error('상품 상세 조회 실패:', e);
+    }
+  }
   renderContent();
 }
 
@@ -980,26 +1055,41 @@ function renderContent() {
     return;
   }
 
-  // If a specific product is selected and has details
-  if (currentProduct && PRODUCT_DETAILS[currentProduct]) {
-    const details = PRODUCT_DETAILS[currentProduct];
-    const product = cat.products.find(p => p.name === currentProduct);
-    main.innerHTML = `
-      <div class="content-header">
-        <div class="cat-label">${cat.name}</div>
-        <h2>${currentProduct}</h2>
-        <div class="cat-desc" style="cursor:pointer;text-decoration:underline" onclick="currentProduct=null;renderContent()">← 카테고리 목록으로</div>
-      </div>
-      ${details.map((text, i) => `
-        <div class="analysis-section">
-          <div class="analysis-title">
-            <span class="num">${String(i+1).padStart(2,'0')}</span>
-            ${ANALYSIS_LABELS[i]}
-          </div>
-          <div class="analysis-content">${text}</div>
+  // If a specific product is selected
+  if (currentProduct) {
+    if (PRODUCT_DETAILS[currentProduct]) {
+      const details = PRODUCT_DETAILS[currentProduct];
+      main.innerHTML = `
+        <div class="content-header">
+          <div class="cat-label">${cat.name}</div>
+          <h2>${currentProduct}</h2>
+          <div class="cat-desc" style="cursor:pointer;text-decoration:underline" onclick="currentProduct=null;renderContent()">← 카테고리 목록으로</div>
         </div>
-      `).join('')}
-    `;
+        ${details.map((text, i) => `
+          <div class="analysis-section">
+            <div class="analysis-title">
+              <span class="num">${String(i+1).padStart(2,'0')}</span>
+              ${ANALYSIS_LABELS[i]}
+            </div>
+            <div class="analysis-content">${text}</div>
+          </div>
+        `).join('')}
+      `;
+    } else {
+      // 로딩 중 표시
+      main.innerHTML = `
+        <div class="content-header">
+          <div class="cat-label">${cat.name}</div>
+          <h2>${currentProduct}</h2>
+          <div class="cat-desc" style="cursor:pointer;text-decoration:underline" onclick="currentProduct=null;renderContent()">← 카테고리 목록으로</div>
+        </div>
+        <div class="empty-state">
+          <div class="empty-icon" style="animation:pulse 1.5s infinite">&#9203;</div>
+          <h3>AI가 분석 중입니다...</h3>
+          <p>${currentProduct} 상품의 11개 분석 항목을 불러오고 있어요.</p>
+        </div>
+      `;
+    }
     return;
   }
 
@@ -1021,26 +1111,11 @@ function renderContent() {
         </div>
       `).join('')}
     </div>
-    ${representativeProduct && PRODUCT_DETAILS[representativeProduct.name] ? `
-      <div style="margin-top:8px">
-        <h3 style="font-size:16px;font-weight:600;margin-bottom:16px">대표 상품: ${representativeProduct.name}</h3>
-        ${PRODUCT_DETAILS[representativeProduct.name].map((text, i) => `
-          <div class="analysis-section">
-            <div class="analysis-title">
-              <span class="num">${String(i+1).padStart(2,'0')}</span>
-              ${ANALYSIS_LABELS[i]}
-            </div>
-            <div class="analysis-content">${text}</div>
-          </div>
-        `).join('')}
-      </div>
-    ` : `
-      <div class="empty-state">
-        <div class="empty-icon">&#128210;</div>
-        <h3>상세 분석 준비 중</h3>
-        <p>이 카테고리의 상품을 선택하면 자세한 분석을 볼 수 있어요.<br>AI 상담에서 질문해 보세요!</p>
-      </div>
-    `}
+    <div class="empty-state" style="padding:40px">
+      <div class="empty-icon">&#128210;</div>
+      <h3>상품을 선택하세요</h3>
+      <p>위 상품을 클릭하면 11개 분석 항목을 확인할 수 있어요.</p>
+    </div>
   `;
 }
 
@@ -1105,9 +1180,12 @@ async function sendChat() {
     typingEl.innerHTML = data.reply || data.error || '응답을 받지 못했어요.';
     chatHistory.push({ role: 'assistant', content: data.reply || '' });
 
-    // Navigate to category if needed
+    // Navigate to category/product if needed
     if (data.action === 'navigate' && data.categoryId && CATEGORIES[data.categoryId]) {
       selectCategory(data.categoryId);
+      if (data.productName) {
+        selectProduct(data.productName);
+      }
     }
   } catch (err) {
     typingEl.innerHTML = '네트워크 오류가 발생했어요. 다시 시도해 주세요.';
@@ -1253,11 +1331,29 @@ function handleSTSEvent(event) {
     case 'conversation.item.input_audio_transcription.completed':
       if (event.transcript) {
         transcriptEl.textContent = '나: ' + event.transcript;
+        // 사용자 발화에서 상품/카테고리 감지 → 네비게이션
+        const userProduct = detectProductFromText(event.transcript);
+        if (userProduct) {
+          selectCategory(ALL_PRODUCT_NAMES[userProduct]);
+          selectProduct(userProduct);
+        } else {
+          const userCat = detectCategoryFromText(event.transcript);
+          if (userCat) selectCategory(userCat);
+        }
       }
       break;
     case 'response.audio_transcript.done':
       if (event.transcript) {
         transcriptEl.textContent = 'AI: ' + event.transcript;
+        // AI 응답에서 상품/카테고리 감지 → 네비게이션
+        const aiProduct = detectProductFromText(event.transcript);
+        if (aiProduct) {
+          selectCategory(ALL_PRODUCT_NAMES[aiProduct]);
+          selectProduct(aiProduct);
+        } else {
+          const aiCat = detectCategoryFromText(event.transcript);
+          if (aiCat) selectCategory(aiCat);
+        }
       }
       break;
   }
@@ -1341,6 +1437,11 @@ function ftfInitSpeechRecognition() {
       }
     }
 
+    // 아바타 발화 중에 사용자가 말하면 interrupt
+    if (ftfIsSpeaking && (final.trim() || (interim.trim() && interim.trim().length > 2))) {
+      ftfInterrupt();
+    }
+
     if (final.trim()) {
       ftfStopListening();
       ftfProcessInput(final.trim());
@@ -1361,7 +1462,7 @@ function ftfInitSpeechRecognition() {
       alert('마이크 권한이 필요합니다.\n브라우저 주소창 왼쪽의 자물쇠 아이콘을 클릭하여 마이크를 허용해 주세요.');
       ftfAutoListen = false;
     } else if (event.error === 'no-speech') {
-      if (ftfAutoListen && ftfSessionInfo && !ftfIsProcessing && !ftfIsSpeaking) {
+      if (ftfAutoListen && ftfSessionInfo && !ftfIsProcessing) {
         setTimeout(ftfStartListening, 500);
       }
     }
@@ -1370,7 +1471,7 @@ function ftfInitSpeechRecognition() {
 
   ftfRecognition.onend = () => {
     ftfIsListening = false;
-    if (ftfAutoListen && ftfSessionInfo && !ftfIsProcessing && !ftfIsSpeaking) {
+    if (ftfAutoListen && ftfSessionInfo && !ftfIsProcessing) {
       setTimeout(ftfStartListening, 600);
     }
   };
@@ -1378,8 +1479,24 @@ function ftfInitSpeechRecognition() {
   return true;
 }
 
+let ftfSpeakTimer = null;
+
+async function ftfInterrupt() {
+  if (!ftfIsSpeaking || !ftfSessionInfo) return;
+  try {
+    await ftfCallProxy('/v1/streaming.interrupt', {
+      session_id: ftfSessionInfo.session_id
+    });
+  } catch (e) {
+    console.error('FTF interrupt error:', e);
+  }
+  clearTimeout(ftfSpeakTimer);
+  ftfIsSpeaking = false;
+  ftfIsProcessing = false;
+}
+
 function ftfStartListening() {
-  if (!ftfRecognition || ftfIsListening || ftfIsProcessing || ftfIsSpeaking || !ftfSessionInfo) return;
+  if (!ftfRecognition || ftfIsListening || ftfIsProcessing || !ftfSessionInfo) return;
   try { ftfRecognition.start(); } catch (e) {}
 }
 
@@ -1410,6 +1527,9 @@ async function ftfProcessInput(text) {
 
     if (data.action === 'navigate' && data.categoryId) {
       selectCategory(data.categoryId);
+      if (data.productName) {
+        selectProduct(data.productName);
+      }
     }
 
     // 아바타가 답변 (교수님 코드: callProxy → streaming.task)
@@ -1425,11 +1545,18 @@ async function ftfProcessInput(text) {
 
     // 한국어 평균 5자/초 기준 대기 (교수님 코드 그대로)
     const speakDuration = Math.max(3000, (ttsText.length / 5) * 1000 + 1500);
-    setTimeout(() => {
+
+    // 발화 중에도 마이크 열어서 interrupt 가능하게
+    if (ftfAutoListen && ftfSessionInfo) {
+      setTimeout(ftfStartListening, 500);
+    }
+
+    ftfSpeakTimer = setTimeout(() => {
       ftfIsSpeaking = false;
       ftfIsProcessing = false;
       if (ftfAutoListen && ftfSessionInfo) {
-        ftfStartListening();
+        if (!ftfIsListening) ftfStartListening();
+        setFTFState('listening');
       } else {
         setFTFState('idle');
       }
