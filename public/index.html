@@ -1999,7 +1999,7 @@ function ftfInitSpeechRecognition() {
     setFTFState('listening');
   };
 
-  ftfRecognition.onresult = (event) => {
+  ftfRecognition.onresult = async (event) => {
     clearTimeout(ftfSilenceTimer);
     let interim = '';
     let final = '';
@@ -2015,7 +2015,7 @@ function ftfInitSpeechRecognition() {
 
     // 아바타 발화 중에 사용자가 말하면 interrupt
     if (ftfIsSpeaking && (final.trim() || (interim.trim() && interim.trim().length > 2))) {
-      ftfInterrupt();
+      await ftfInterrupt();
     }
 
     if (final.trim()) {
@@ -2195,6 +2195,14 @@ async function startFTF() {
         track.attach(mediaEl);
         mediaEl.style.display = 'block';
         placeholder.style.display = 'none';
+      }
+    });
+
+    // interrupt 시 트랙이 잠깐 끊겨도 화면 까매지지 않게
+    // 세션 활성 중에는 detach하지 않음 (비디오 유지)
+    ftfRoom.on(lk.RoomEvent.TrackUnsubscribed, (track) => {
+      if (!ftfSessionInfo) {
+        track.detach(mediaEl);
       }
     });
 
