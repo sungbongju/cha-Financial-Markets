@@ -1345,15 +1345,6 @@ function handleSTSEvent(event) {
     case 'response.audio_transcript.done':
       if (event.transcript) {
         transcriptEl.textContent = 'AI: ' + event.transcript;
-        // AI 응답에서 상품/카테고리 감지 → 네비게이션
-        const aiProduct = detectProductFromText(event.transcript);
-        if (aiProduct) {
-          selectCategory(ALL_PRODUCT_NAMES[aiProduct]);
-          selectProduct(aiProduct);
-        } else {
-          const aiCat = detectCategoryFromText(event.transcript);
-          if (aiCat) selectCategory(aiCat);
-        }
       }
       break;
   }
