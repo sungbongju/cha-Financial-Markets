@@ -1898,6 +1898,18 @@ async function startSTS() {
   }
 }
 
+function stsNavigateByText(text) {
+  if (!text) return;
+  const userProduct = detectProductFromText(text);
+  if (userProduct) {
+    selectCategory(ALL_PRODUCT_NAMES[userProduct]);
+    selectProduct(userProduct);
+  } else {
+    const userCat = detectCategoryFromText(text);
+    if (userCat) selectCategory(userCat);
+  }
+}
+
 function handleSTSEvent(event) {
   const statusEl = document.getElementById('stsStatus');
   const transcriptEl = document.getElementById('stsTranscript');
@@ -1923,22 +1935,32 @@ function handleSTSEvent(event) {
       break;
     case 'conversation.item.input_audio_transcription.completed':
       if (event.transcript) {
+        console.log('[STS] 사용자 전사:', event.transcript);
         transcriptEl.textContent = '나: ' + event.transcript;
-        // 사용자 발화에서 상품/카테고리 감지 → 네비게이션
-        const userProduct = detectProductFromText(event.transcript);
-        if (userProduct) {
-          selectCategory(ALL_PRODUCT_NAMES[userProduct]);
-          selectProduct(userProduct);
-        } else {
-          const userCat = detectCategoryFromText(event.transcript);
-          if (userCat) selectCategory(userCat);
-        }
+        stsNavigateByText(event.transcript);
+      }
+      break;
+    case 'conversation.item.input_audio_transcription.failed':
+      // interrupt 시 전사 실패 → 부분 텍스트라도 처리
+      console.log('STS transcription failed:', event);
+      break;
+    case 'response.audio_transcript.delta':
+      // AI 응답 중간 전사 (interrupt 전 마지막 텍스트 캡처)
+      if (event.delta) {
+        transcriptEl.textContent = 'AI: ' + (transcriptEl._aiBuffer = (transcriptEl._aiBuffer || '') + event.delta);
       }
       break;
     case 'response.audio_transcript.done':
       if (event.transcript) {
         transcriptEl.textContent = 'AI: ' + event.transcript;
       }
+      transcriptEl._aiBuffer = '';
+      break;
+    case 'response.cancelled':
+      // interrupt 발생 → 상태 리셋
+      statusEl.textContent = '듣고 있어요...';
+      updateSTSVisual('listening');
+      transcriptEl._aiBuffer = '';
       break;
   }
 }
