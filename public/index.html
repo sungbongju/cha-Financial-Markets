@@ -1521,6 +1521,26 @@ let currentMode = 'ttt';
 let chatHistory = [];
 let isSending = false;
 
+// ── 채팅 기록 DB 저장 (fire-and-forget) ──
+const SAVE_CHAT_API = 'https://aiforalab.com/finmarket-api/api.php';
+const chatSessionId = Date.now().toString();
+function saveChat(role, content, mode) {
+  try {
+    const token = window.finmarketAuth && window.finmarketAuth.getToken();
+    if (!token || token === 'guest' || token === 'local') return;
+    fetch(SAVE_CHAT_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'save_chat',
+        token: token,
+        session_id: mode + '_' + chatSessionId,
+        messages: [{ role: role, content: content }]
+      })
+    }).catch(() => {});
+  } catch (e) {}
+}
+
 // STS state
 let stsActive = false;
 let stsPeerConnection = null;
@@ -1794,6 +1814,7 @@ async function sendChat() {
   const typingEl = appendMessage('bot', '<div class="typing-dots"><span></span><span></span><span></span></div>');
 
   chatHistory.push({ role: 'user', content: msg });
+  saveChat('user', msg, 'ttt');
 
   try {
     const res = await fetch('/api/openai-chat', {
@@ -1805,6 +1826,7 @@ async function sendChat() {
 
     typingEl.innerHTML = data.reply || data.error || '응답을 받지 못했어요.';
     chatHistory.push({ role: 'assistant', content: data.reply || '' });
+    saveChat('assistant', data.reply || '', 'ttt');
 
     // Navigate to category/product if needed
     if (data.action === 'navigate' && data.categoryId && CATEGORIES[data.categoryId]) {
@@ -2001,6 +2023,7 @@ function handleSTSEvent(event) {
         console.log('[STS] 사용자 전사:', event.transcript);
         transcriptEl.textContent = '나: ' + event.transcript;
         stsNavigateByText(event.transcript);
+        saveChat('user', event.transcript, 'sts');
       }
       break;
     case 'conversation.item.input_audio_transcription.failed':
@@ -2018,6 +2041,7 @@ function handleSTSEvent(event) {
         transcriptEl.textContent = 'AI: ' + event.transcript;
         // AI 응답에서 네비게이션 (STT 오인식 보완, 사용자 전사 실패 시만)
         stsNavigateByText(event.transcript, true);
+        saveChat('assistant', event.transcript, 'sts');
       }
       transcriptEl._aiBuffer = '';
       break;
@@ -2195,6 +2219,8 @@ async function ftfProcessInput(text) {
 
     chatHistory.push({ role: 'user', content: text });
     chatHistory.push({ role: 'assistant', content: data.reply || '' });
+    saveChat('user', text, 'ftf');
+    saveChat('assistant', data.reply || '', 'ftf');
 
     if (data.action === 'navigate' && data.categoryId) {
       selectCategory(data.categoryId);
