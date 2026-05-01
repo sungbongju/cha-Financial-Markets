@@ -2329,6 +2329,34 @@ async function startFTF() {
       }
     });
 
+    // 🔍 [진단] HeyGen 구 API가 어떤 이벤트를 보내는지 모두 로깅
+    ftfRoom.on(lk.RoomEvent.DataReceived, (payload, participant, kind, topic) => {
+      try {
+        const text = new TextDecoder().decode(payload);
+        let parsed = null;
+        try { parsed = JSON.parse(text); } catch {}
+        console.log('[FTF-DIAG] DataReceived:', {
+          raw: text,
+          parsed: parsed,
+          from: participant?.identity || '(server)',
+          topic: topic || '(none)',
+          time: new Date().toISOString()
+        });
+      } catch(e) {
+        console.log('[FTF-DIAG] DataReceived (decode error):', e.message);
+      }
+    });
+
+    // 🔍 [진단] 모든 RoomEvent 종류 로깅 (어떤 이벤트가 오는지 한눈에)
+    const _trackedEvents = ['ParticipantConnected','ParticipantDisconnected','ActiveSpeakersChanged','TrackPublished','TrackMuted','TrackUnmuted','ConnectionQualityChanged','Disconnected','Reconnected','SignalConnected'];
+    _trackedEvents.forEach(evtName => {
+      if (lk.RoomEvent[evtName]) {
+        ftfRoom.on(lk.RoomEvent[evtName], (...args) => {
+          console.log('[FTF-DIAG] RoomEvent.' + evtName, args.map(a => a?.identity || a?.name || a?.toString?.().slice(0,80) || a));
+        });
+      }
+    });
+
     await ftfRoom.connect(ftfSessionInfo.url, ftfSessionInfo.access_token);
 
     // 4. 스트리밍 시작
