@@ -2329,32 +2329,33 @@ async function startFTF() {
       }
     });
 
-    // 🔍 [진단] HeyGen 구 API가 어떤 이벤트를 보내는지 모두 로깅
-    ftfRoom.on(lk.RoomEvent.DataReceived, (payload, participant, kind, topic) => {
+    // ★ HeyGen 이벤트 기반 상태 전환 (DataReceived)
+    // 발견된 이벤트: avatar_start_talking / avatar_stop_talking / avatar_talking_message / avatar_end_message
+    ftfRoom.on(lk.RoomEvent.DataReceived, (payload, participant) => {
       try {
-        const text = new TextDecoder().decode(payload);
-        let parsed = null;
-        try { parsed = JSON.parse(text); } catch {}
-        console.log('[FTF-DIAG] DataReceived:', {
-          raw: text,
-          parsed: parsed,
-          from: participant?.identity || '(server)',
-          topic: topic || '(none)',
-          time: new Date().toISOString()
-        });
-      } catch(e) {
-        console.log('[FTF-DIAG] DataReceived (decode error):', e.message);
-      }
-    });
+        const msg = JSON.parse(new TextDecoder().decode(payload));
+        const evt = msg.type;
 
-    // 🔍 [진단] 모든 RoomEvent 종류 로깅 (어떤 이벤트가 오는지 한눈에)
-    const _trackedEvents = ['ParticipantConnected','ParticipantDisconnected','ActiveSpeakersChanged','TrackPublished','TrackMuted','TrackUnmuted','ConnectionQualityChanged','Disconnected','Reconnected','SignalConnected'];
-    _trackedEvents.forEach(evtName => {
-      if (lk.RoomEvent[evtName]) {
-        ftfRoom.on(lk.RoomEvent[evtName], (...args) => {
-          console.log('[FTF-DIAG] RoomEvent.' + evtName, args.map(a => a?.identity || a?.name || a?.toString?.().slice(0,80) || a));
-        });
-      }
+        if (evt === 'avatar_start_talking') {
+          // 아바타 발화 시작 → speaking
+          ftfIsSpeaking = true;
+          setFTFState('speaking');
+          console.log('[FTF] avatar_start_talking', msg.task_id);
+        } else if (evt === 'avatar_stop_talking') {
+          // 아바타 발화 종료 → 즉시 listening 전환 (폴백 타이머 취소)
+          clearTimeout(ftfSpeakTimer);
+          ftfIsSpeaking = false;
+          ftfIsProcessing = false;
+          console.log('[FTF] avatar_stop_talking', msg.task_id, msg.duration_ms + 'ms');
+          if (ftfAutoListen && ftfSessionInfo) {
+            setFTFState('listening');
+            if (!ftfIsListening) ftfStartListening();
+          } else {
+            setFTFState('idle');
+          }
+        }
+        // avatar_talking_message / avatar_end_message는 메타정보라 상태 전환에 안 씀
+      } catch(e) {}
     });
 
     await ftfRoom.connect(ftfSessionInfo.url, ftfSessionInfo.access_token);
